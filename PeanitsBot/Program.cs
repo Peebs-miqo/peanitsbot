@@ -4,12 +4,18 @@ using System;
 
 public class Program
 {
+	public static bool ShutdownRequested = false;
+
 	private static async Task Main(string[] args)
 	{
 		Bot bot = new();
 		await bot.Start();
 
-		Console.WriteLine("Press return to exit");
-		Console.ReadLine();
+		while (!ShutdownRequested)
+		{
+			await Task.Delay(1000);
+		}
+
+		await bot.Stop();
 	}
 }

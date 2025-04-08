@@ -25,13 +25,19 @@ public class Bot
 
 	public async Task Start()
 	{
-		await Client.LoginAsync(Discord.TokenType.Bot, "MTM1MzY5NDQwNDY2OTQ3Mjc2OQ.GQSqgt.ZYF58sU0L0K6G1OEaDhppzcgHPhXsNtKpijd78");
+		await Client.LoginAsync(Discord.TokenType.Bot, Environment.GetEnvironmentVariable("PeanitsBot_DiscordBotToken"));
 		await Client.StartAsync();
+	}
+
+	public async Task Stop()
+	{
+		await Client.StopAsync();
 	}
 
 	private async Task OnClientReady()
 	{
 		await Interactions.AddModuleAsync<RaidPLannerModule>(null);
+		await Interactions.AddModuleAsync<ManagementCommandModule>(null);
 
 		await this.Interactions.RegisterCommandsGloballyAsync();
 	}
