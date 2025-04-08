@@ -36,7 +36,7 @@ public class Bot
 
 	private async Task OnClientReady()
 	{
-		await Interactions.AddModuleAsync<RaidPLannerModule>(null);
+		await Interactions.AddModuleAsync<RaidPlannerModule>(null);
 		await Interactions.AddModuleAsync<ManagementCommandModule>(null);
 
 		await this.Interactions.RegisterCommandsGloballyAsync();

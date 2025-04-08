@@ -6,24 +6,35 @@ using Discord.Interactions;
 using Discord.Rest;
 using Discord.WebSocket;
 
-public class RaidPLannerModule
+public class RaidPlannerModule
 	: InteractionModuleBase<SocketInteractionContext>
 {
-	public static Schedule Schedule = new();
+	private Schedule schedule;
+
+	public RaidPlannerModule()
+	{
+		this.schedule = Program.GetData<Schedule>("schedule.json");
+	}
+
+	public void Save()
+	{
+		Program.SetData(this.schedule, "schedule.json");
+	}
 
 	[SlashCommand("poll", "Start a weekly planning")]
 	public async Task Poll()
 	{
 		await this.RespondAsync("Done", ephemeral: true);
-		RestUserMessage message = await this.Context.Channel.SendMessageAsync(null, components:Schedule.Build());
-		Schedule.MessageId = message.Id;
-		Schedule.ChannelId = message.Channel.Id;
+		RestUserMessage message = await this.Context.Channel.SendMessageAsync(null, components:this.schedule.Build());
+		this.schedule.MessageId = message.Id;
+		this.schedule.ChannelId = message.Channel.Id;
+		this.Save();
 	}
 
 	[ComponentInteraction("poll-show-me")]
 	public async Task OnShowMeCallback()
 	{
-		await this.Context.Interaction.RespondAsync(null, components:Schedule.BuildReply(this.Context.Interaction.User.Id), ephemeral:true);
+		await this.Context.Interaction.RespondAsync(null, components:this.schedule.BuildReply(this.Context.Interaction.User.Id), ephemeral:true);
 	}
 
 	[ComponentInteraction("vote-*")]
@@ -33,30 +44,31 @@ public class RaidPLannerModule
 		if (sm == null)
 			return;
 
-		await Schedule.Vote(sm.Data.CustomId, this.Context.Interaction.User.Id);
+		await this.schedule.Vote(sm.Data.CustomId, this.Context.Interaction.User.Id);
+		this.Save();
 
 		await sm.UpdateAsync(update =>
 		{
-			update.Components = Schedule.BuildReply(this.Context.Interaction.User.Id);
+			update.Components = this.schedule.BuildReply(this.Context.Interaction.User.Id);
 		});
 	}
 }
 
 public class Schedule
 {
-	public ulong ChannelId;
-	public ulong MessageId;
+	public ulong ChannelId { get; set; }
+	public ulong MessageId { get; set; }
 
-	public Day Mon = new();
-	public Day Wed = new();
-	public Day Thu = new();
-	public Day Fri = new();
+	public Day Mon { get; set; } = new();
+	public Day Wed { get; set; } = new();
+	public Day Thu { get; set; } = new();
+	public Day Fri { get; set; } = new();
 
 	public class Day
 	{
-		public HashSet<ulong> Votes700 = new();
-		public HashSet<ulong> Votes830 = new();
-		public HashSet<ulong> Votes100 = new();
+		public HashSet<ulong> Votes700 { get; set; } = new();
+		public HashSet<ulong> Votes830 { get; set; } = new();
+		public HashSet<ulong> Votes100 { get; set; } = new();
 	}
 
 	public async Task UpdateSchedule()
