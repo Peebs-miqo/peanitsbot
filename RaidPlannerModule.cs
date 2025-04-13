@@ -31,6 +31,14 @@ public class RaidPlannerModule
 		this.Save();
 	}
 
+	[SlashCommand("reset", "reset the schedule")]
+	public async Task Reset()
+	{
+		this.schedule.Reset();
+		this.Save();
+		await this.RespondAsync("Done", ephemeral: true);
+	}
+
 	[ComponentInteraction("poll-show-me")]
 	public async Task OnShowMeCallback()
 	{
@@ -69,6 +77,25 @@ public class Schedule
 		public HashSet<ulong> Votes700 { get; set; } = new();
 		public HashSet<ulong> Votes830 { get; set; } = new();
 		public HashSet<ulong> Votes100 { get; set; } = new();
+	}
+
+	public void Reset()
+	{
+		this.Mon.Votes700.Clear();
+		this.Mon.Votes830.Clear();
+		this.Mon.Votes100.Clear();
+
+		this.Wed.Votes700.Clear();
+		this.Wed.Votes830.Clear();
+		this.Wed.Votes100.Clear();
+
+		this.Thu.Votes700.Clear();
+		this.Thu.Votes830.Clear();
+		this.Thu.Votes100.Clear();
+
+		this.Fri.Votes700.Clear();
+		this.Fri.Votes830.Clear();
+		this.Fri.Votes100.Clear();
 	}
 
 	public async Task UpdateSchedule()
