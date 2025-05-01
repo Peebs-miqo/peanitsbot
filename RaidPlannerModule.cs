@@ -95,56 +95,76 @@ public class Schedule
 		this.Sunday.Reset();
 	}
 
-	private Dictionary<ulong, int> GetVoteCounts()
-	{
-		Dictionary<ulong, int> voteCounts = new();
-
-		this.GetVoteCount(ref voteCounts, this.Monday);
-		this.GetVoteCount(ref voteCounts, this.Tuesday);
-		this.GetVoteCount(ref voteCounts, this.Wednesday);
-		this.GetVoteCount(ref voteCounts, this.Thursday);
-		this.GetVoteCount(ref voteCounts, this.Friday);
-		this.GetVoteCount(ref voteCounts, this.Saturday);
-		this.GetVoteCount(ref voteCounts, this.Sunday);
-
-		return voteCounts;
-	}
-
-	private void GetVoteCount(ref Dictionary<ulong, int> voteCounts, Day day)
-	{
-		this.GetVoteCount(ref voteCounts, day.Votes400);
-		this.GetVoteCount(ref voteCounts, day.Votes830);
-	}
-
-	private void GetVoteCount(ref Dictionary<ulong, int> voteCounts, HashSet<ulong> slots)
-	{
-		foreach(ulong user in slots)
-		{
-			if (!voteCounts.ContainsKey(user))
-				voteCounts[user] = 0;
-
-			voteCounts[user]++;
-		}
-	}
-
 	public async Task<string> BuildMessage()
 	{
+		DateTimeOffset week = DateTimeOffset.Now;
+		int daysOff = (int)DayOfWeek.Monday - (int)week.DayOfWeek;
+		week = week.AddDays(daysOff);
+
+		if(week < DateTimeOffset.Now)
+			week = week.AddDays(7);
+
+		DateTimeOffset weekStartDate = week.Date;
+
 		StringBuilder builder = new();
 		builder.AppendLine("In the stripped club, straight up Monking it.");
 		builder.AppendLine("And by 'IT', haha well. lets justr say. My Peanits.");
 		builder.AppendLine();
 
-		Dictionary<ulong, int> voteCounts = this.GetVoteCounts();
-		foreach((ulong userId, int count) in voteCounts)
-		{
-			////IUser user = await channel.GetUserAsync(userId);
+		builder.Append($"Monday <t:{weekStartDate.AddDays(0).AddHours(20).AddMinutes(30).ToUnixTimeSeconds()}:t>, ");
+		builder.Append($"<t:{weekStartDate.AddDays(0).AddHours(20).AddMinutes(30).ToUnixTimeSeconds()}:R> : ");
+		builder.AppendLine(await this.GetUsersAsync(this.Monday.Votes830));
 
-			builder.AppendLine($"???? is available for {count} timeslots");
-		}
+		//builder.Append($"<t:{weekStartDate.AddDays(1).AddHours(20).AddMinutes(30).ToUnixTimeSeconds()}:F> : ");
+		//builder.AppendLine(await this.GetUsersAsync(this.Tuesday.Votes830));
+
+		builder.Append($"Wednesday <t:{weekStartDate.AddDays(2).AddHours(20).AddMinutes(30).ToUnixTimeSeconds()}:t>, ");
+		builder.Append($"<t:{weekStartDate.AddDays(2).AddHours(20).AddMinutes(30).ToUnixTimeSeconds()}:R> : ");
+		builder.AppendLine(await this.GetUsersAsync(this.Wednesday.Votes830));
+
+		builder.Append($"Thursday <t:{weekStartDate.AddDays(3).AddHours(20).AddMinutes(30).ToUnixTimeSeconds()}:t>, ");
+		builder.Append($"<t:{weekStartDate.AddDays(3).AddHours(20).AddMinutes(30).ToUnixTimeSeconds()}:R> : ");
+		builder.AppendLine(await this.GetUsersAsync(this.Thursday.Votes830));
+
+		builder.Append($"Friday <t:{weekStartDate.AddDays(4).AddHours(20).AddMinutes(30).ToUnixTimeSeconds()}:t>, ");
+		builder.Append($"<t:{weekStartDate.AddDays(4).AddHours(20).AddMinutes(30).ToUnixTimeSeconds()}:R> : ");
+		builder.AppendLine(await GetUsersAsync(this.Friday.Votes830));
+
+		builder.Append($"Saturday <t:{weekStartDate.AddDays(5).AddHours(16).AddMinutes(0).ToUnixTimeSeconds()}:t>, ");
+		builder.Append($"<t:{weekStartDate.AddDays(5).AddHours(16).AddMinutes(0).ToUnixTimeSeconds()}:R> : ");
+		builder.AppendLine(await this.GetUsersAsync(this.Saturday.Votes400));
+
+		builder.Append($"Saturday <t:{weekStartDate.AddDays(5).AddHours(20).AddMinutes(0).ToUnixTimeSeconds()}:t>, ");
+		builder.Append($"<t:{weekStartDate.AddDays(5).AddHours(20).AddMinutes(0).ToUnixTimeSeconds()}:R> : ");
+		builder.AppendLine(await this.GetUsersAsync(this.Saturday.Votes830));
+
+		builder.Append($"Sunday <t:{weekStartDate.AddDays(6).AddHours(16).AddMinutes(0).ToUnixTimeSeconds()}:t>, ");
+		builder.Append($"<t:{weekStartDate.AddDays(6).AddHours(16).AddMinutes(0).ToUnixTimeSeconds()}:R> : ");
+		builder.AppendLine(await GetUsersAsync(this.Sunday.Votes400));
+
+		builder.Append($"Sunday <t:{weekStartDate.AddDays(6).AddHours(20).AddMinutes(0).ToUnixTimeSeconds()}:t>, ");
+		builder.Append($"<t:{weekStartDate.AddDays(6).AddHours(20).AddMinutes(0).ToUnixTimeSeconds()}:R> : ");
+		builder.AppendLine(await GetUsersAsync(this.Sunday.Votes830));
 
 		return builder.ToString();
 	}
 
+	public async Task<string> GetUsersAsync(HashSet<ulong> votes)
+	{
+		StringBuilder builder = new();
+		bool isFirst = true;
+		foreach (ulong userId in votes)
+		{
+			if (!isFirst)
+				builder.Append(", ");
+			isFirst = false;
+
+			IUser user = await Bot.Client.GetUserAsync(userId);
+			builder.Append(user.GlobalName);
+		}
+
+		return builder.ToString();
+	}
 	public MessageComponent BuildComponents()
 	{
 		ComponentBuilder b = new();
