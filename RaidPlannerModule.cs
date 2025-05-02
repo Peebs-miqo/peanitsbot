@@ -139,7 +139,7 @@ public class Schedule
 			{
 				DateTimeOffset slotTime = dayTime.Date;
 				slotTime = slotTime.AddTicks(slot.Time.Ticks);
-				slotTime = slotTime.AddHours(10);
+				slotTime = slotTime.AddHours(-10);
 
 				message.Append(slot.GetIcon());
 				message.Append(slot.Name);
