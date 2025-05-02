@@ -22,9 +22,9 @@ public class RaidPlannerModule
 			schedule.AddSlot(DayOfWeek.Thursday, new(20, 30), "Evening");
 			schedule.AddSlot(DayOfWeek.Friday, new(20, 30), "Evening");
 			schedule.AddSlot(DayOfWeek.Saturday, new(16, 00), "Afternoon");
-			schedule.AddSlot(DayOfWeek.Saturday, new(18, 00), "Evening");
+			schedule.AddSlot(DayOfWeek.Saturday, new(20, 00), "Evening");
 			schedule.AddSlot(DayOfWeek.Sunday, new(16, 00), "Afternoon");
-			schedule.AddSlot(DayOfWeek.Sunday, new(18, 00), "Evening");
+			schedule.AddSlot(DayOfWeek.Sunday, new(20, 00), "Evening");
 		}
 
 		this.schedule = schedule;
