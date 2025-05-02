@@ -7,11 +7,11 @@ public class Program
 {
 	public static bool ShutdownRequested = false;
 
-	public static T GetData<T>(string name)
+	public static T? GetData<T>(string name)
 		where T : new()
 	{
 		if (!File.Exists(name))
-			return new T();
+			return default;
 
 		string json = File.ReadAllText(name);
 		T? val = JsonSerializer.Deserialize<T>(json);

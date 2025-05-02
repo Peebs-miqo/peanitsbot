@@ -3,7 +3,6 @@ namespace Peanits;
 using System.Text;
 using Discord;
 using Discord.Interactions;
-using Discord.Rest;
 using Discord.WebSocket;
 
 public class RaidPlannerModule
@@ -13,7 +12,23 @@ public class RaidPlannerModule
 
 	public RaidPlannerModule()
 	{
-		this.schedule = Program.GetData<Schedule>("schedule.json");
+		Schedule? schedule = Program.GetData<Schedule>("schedule.json");
+
+		if (schedule == null)
+		{
+			schedule = new();
+			schedule.AddSlot(DayOfWeek.Monday, new(20, 30), "Evening");
+			schedule.AddSlot(DayOfWeek.Wednesday, new(20, 30), "Evening");
+			schedule.AddSlot(DayOfWeek.Thursday, new(20, 30), "Evening");
+			schedule.AddSlot(DayOfWeek.Friday, new(20, 30), "Evening");
+			schedule.AddSlot(DayOfWeek.Saturday, new(16, 00), "Afternoon");
+			schedule.AddSlot(DayOfWeek.Saturday, new(18, 00), "Evening");
+			schedule.AddSlot(DayOfWeek.Sunday, new(16, 00), "Afternoon");
+			schedule.AddSlot(DayOfWeek.Sunday, new(18, 00), "Evening");
+		}
+
+		this.schedule = schedule;
+
 	}
 
 	public void Save()
@@ -21,250 +36,280 @@ public class RaidPlannerModule
 		Program.SetData(this.schedule, "schedule.json");
 	}
 
-	[SlashCommand("poll", "Start a weekly raid time poll")]
+	[SlashCommand("create", "Create a weekly schedule here")]
 	public async Task Poll()
 	{
-		await this.RespondAsync("Done", ephemeral: true);
-		string msg = await this.schedule.BuildMessage();
-		RestUserMessage message = await this.Context.Channel.SendMessageAsync(msg, components:this.schedule.BuildComponents());
-		this.schedule.MessageId = message.Id;
-		this.schedule.ChannelId = message.Channel.Id;
+		await this.schedule.Post(this.Context.Channel);
 		this.Save();
+		await this.RespondAsync("Done", ephemeral: true);
 	}
 
-	[SlashCommand("reset", "reset the schedule")]
-	public async Task Reset()
+	[SlashCommand("update", "Updates posted days")]
+	public async Task Update()
 	{
-		this.schedule.Reset();
+		await this.DeferAsync(true);
+		await this.ModifyOriginalResponseAsync((m) => m.Content = "Updating...");
+
+		await this.schedule.Update(this.Context.Channel);
+		this.Save();
+
+		await this.ModifyOriginalResponseAsync((m) => m.Content = "Done");
+	}
+
+	[SlashCommand("reset", "Resets the selected day")]
+	public async Task Reset(DayOfWeek day)
+	{
+		await this.schedule.Reset(day, this.Context.Channel);
 		this.Save();
 		await this.RespondAsync("Done", ephemeral: true);
 	}
 
-	[ComponentInteraction("poll-header-*")]
-	public async Task OnPollCallback()
+	[SlashCommand("set-icon-store", "Sets the schdules icon store to the server")]
+	public async Task SetIconStore()
+	{
+		this.schedule.SetIconStore(this.Context.Guild);
+		this.Save();
+		await this.RespondAsync("Done", ephemeral: true);
+	}
+
+	[ComponentInteraction("join-*")]
+	public async Task OnJoinCallback()
 	{
 		SocketMessageComponent? sm = this.Context.Interaction as SocketMessageComponent;
-		if (sm == null)
+		if (sm == null || sm.GuildId == null)
 			return;
 
-		this.schedule.Vote(sm.Data.CustomId, this.Context.Interaction.User.Id);
-		this.Save();
+		Schedule.Day? day = this.schedule.Join(sm.Data.CustomId, this.Context.Interaction.User);
 
-		string msg = await this.schedule.BuildMessage();
-
-		await sm.UpdateAsync((m) =>
+		if (day == null)
 		{
-			m.Content = msg;
-			m.Components = this.schedule.BuildComponents();
-		});
+			await this.RespondAsync("Failed");
+		}
+		else
+		{
+			(string message, MessageComponent component) = await day.Generate();
+			await sm.UpdateAsync(m =>
+			{
+				m.Content = message;
+				m.Components = component;
+			});
+
+			this.Save();
+		}
 	}
 }
 
 public class Schedule
 {
-	public ulong ChannelId { get; set; }
-	public ulong MessageId { get; set; }
-
-	public Day Monday { get; set; } = new();
-	public Day Tuesday { get; set; } = new();
-	public Day Wednesday { get; set; } = new();
-	public Day Thursday { get; set; } = new();
-	public Day Friday { get; set; } = new();
-	public Day Saturday { get; set; } = new();
-	public Day Sunday { get; set; } = new();
+	public List<Day> Days { get; set; } = new();
 
 	public class Day
 	{
-		public HashSet<ulong> Votes400 { get; set; } = new();
-		public HashSet<ulong> Votes830 { get; set; } = new();
-		public void Reset()
+		public ulong MessageId { get; set; }
+		public ulong? IconStore { get; set; }
+		public DayOfWeek RaidDay { get; set; } = DayOfWeek.Sunday;
+		public List<Slot> Slots { get; set; } = new();
+
+		public void AddSlot(string name, TimeOnly time)
 		{
-			this.Votes400.Clear();
-			this.Votes830.Clear();
+			Slot slot = new();
+			slot.Name = name;
+			slot.Time = time;
+			this.Slots.Add(slot);
+		}
+
+		public async Task<(string message, MessageComponent component)> Generate()
+		{
+			await Task.Yield();
+
+			StringBuilder message = new();
+			ComponentBuilder components = new();
+
+			DateTimeOffset dayTime = DateTimeOffset.Now;
+			dayTime = dayTime.AddDays(-(int)dayTime.DayOfWeek);
+			dayTime = dayTime.AddDays((int)this.RaidDay);
+
+			if(dayTime < DateTimeOffset.Now)
+				dayTime = dayTime.AddDays(7);
+
+			message.AppendLine("<:empty:1367790271059984434>");
+			message.AppendLine($"**{this.RaidDay.ToString()}**");
+
+			foreach(Slot slot in this.Slots)
+			{
+				DateTimeOffset slotTime = dayTime.Date;
+				slotTime = slotTime.AddTicks(slot.Time.Ticks);
+
+				message.Append(slot.GetIcon());
+				message.Append(slot.Name);
+				message.Append($" - <t:{slotTime.ToUnixTimeSeconds()}:t>");
+				message.Append($" (<t:{slotTime.ToUnixTimeSeconds()}:R>) ");
+				message.Append($" [{slot.Users.Count}/8]: ");
+
+				bool isFirstUser = true;
+				foreach(ulong userId in slot.Users)
+				{
+					if (!isFirstUser)
+						message.Append(",   ");
+
+					isFirstUser = false;
+
+					IUser user = await Bot.Client.GetUserAsync(userId);
+
+					if (this.IconStore != null)
+					{
+						message.Append(await DiscordUtils.GetUserAvatarAsEmote(user, (ulong)this.IconStore));
+						message.Append(" ");
+					}
+
+					message.Append(user.GlobalName);
+				}
+
+				message.AppendLine();
+				components.WithButton(slot.Name, $"join-{this.RaidDay}-{slot.Name}", slot.GetButtonStyle());
+			}
+
+			return (message.ToString(), components.Build());
 		}
 	}
 
-	public void Reset()
+	public class Slot
 	{
-		this.Monday.Reset();
-		this.Tuesday.Reset();
-		this.Wednesday.Reset();
-		this.Thursday.Reset();
-		this.Friday.Reset();
-		this.Saturday.Reset();
-		this.Sunday.Reset();
-	}
+		public string Name { get; set; } = string.Empty;
+		public TimeOnly Time { get; set; }
+		public HashSet<ulong> Users { get; set; } = new();
 
-	public async Task<string> BuildMessage()
-	{
-		DateTimeOffset week = DateTimeOffset.Now;
-		int daysOff = (int)DayOfWeek.Monday - (int)week.DayOfWeek;
-		week = week.AddDays(daysOff);
-
-		if(week < DateTimeOffset.Now)
-			week = week.AddDays(7);
-
-		DateTimeOffset weekStartDate = week.Date;
-
-		StringBuilder builder = new();
-		builder.AppendLine("In the stripped club, straight up Monking it.");
-		builder.AppendLine("And by 'IT', haha well. lets justr say. My Peanits.");
-		builder.AppendLine();
-
-		builder.Append($"Monday <t:{weekStartDate.AddDays(0).AddHours(20).AddMinutes(30).ToUnixTimeSeconds()}:t>, ");
-		builder.Append($"<t:{weekStartDate.AddDays(0).AddHours(20).AddMinutes(30).ToUnixTimeSeconds()}:R> : ");
-		builder.AppendLine(await this.GetUsersAsync(this.Monday.Votes830));
-
-		//builder.Append($"<t:{weekStartDate.AddDays(1).AddHours(20).AddMinutes(30).ToUnixTimeSeconds()}:F> : ");
-		//builder.AppendLine(await this.GetUsersAsync(this.Tuesday.Votes830));
-
-		builder.Append($"Wednesday <t:{weekStartDate.AddDays(2).AddHours(20).AddMinutes(30).ToUnixTimeSeconds()}:t>, ");
-		builder.Append($"<t:{weekStartDate.AddDays(2).AddHours(20).AddMinutes(30).ToUnixTimeSeconds()}:R> : ");
-		builder.AppendLine(await this.GetUsersAsync(this.Wednesday.Votes830));
-
-		builder.Append($"Thursday <t:{weekStartDate.AddDays(3).AddHours(20).AddMinutes(30).ToUnixTimeSeconds()}:t>, ");
-		builder.Append($"<t:{weekStartDate.AddDays(3).AddHours(20).AddMinutes(30).ToUnixTimeSeconds()}:R> : ");
-		builder.AppendLine(await this.GetUsersAsync(this.Thursday.Votes830));
-
-		builder.Append($"Friday <t:{weekStartDate.AddDays(4).AddHours(20).AddMinutes(30).ToUnixTimeSeconds()}:t>, ");
-		builder.Append($"<t:{weekStartDate.AddDays(4).AddHours(20).AddMinutes(30).ToUnixTimeSeconds()}:R> : ");
-		builder.AppendLine(await GetUsersAsync(this.Friday.Votes830));
-
-		builder.Append($"Saturday <t:{weekStartDate.AddDays(5).AddHours(16).AddMinutes(0).ToUnixTimeSeconds()}:t>, ");
-		builder.Append($"<t:{weekStartDate.AddDays(5).AddHours(16).AddMinutes(0).ToUnixTimeSeconds()}:R> : ");
-		builder.AppendLine(await this.GetUsersAsync(this.Saturday.Votes400));
-
-		builder.Append($"Saturday <t:{weekStartDate.AddDays(5).AddHours(20).AddMinutes(0).ToUnixTimeSeconds()}:t>, ");
-		builder.Append($"<t:{weekStartDate.AddDays(5).AddHours(20).AddMinutes(0).ToUnixTimeSeconds()}:R> : ");
-		builder.AppendLine(await this.GetUsersAsync(this.Saturday.Votes830));
-
-		builder.Append($"Sunday <t:{weekStartDate.AddDays(6).AddHours(16).AddMinutes(0).ToUnixTimeSeconds()}:t>, ");
-		builder.Append($"<t:{weekStartDate.AddDays(6).AddHours(16).AddMinutes(0).ToUnixTimeSeconds()}:R> : ");
-		builder.AppendLine(await GetUsersAsync(this.Sunday.Votes400));
-
-		builder.Append($"Sunday <t:{weekStartDate.AddDays(6).AddHours(20).AddMinutes(0).ToUnixTimeSeconds()}:t>, ");
-		builder.Append($"<t:{weekStartDate.AddDays(6).AddHours(20).AddMinutes(0).ToUnixTimeSeconds()}:R> : ");
-		builder.AppendLine(await GetUsersAsync(this.Sunday.Votes830));
-
-		return builder.ToString();
-	}
-
-	public async Task<string> GetUsersAsync(HashSet<ulong> votes)
-	{
-		StringBuilder builder = new();
-		bool isFirst = true;
-		foreach (ulong userId in votes)
+		public string GetIcon()
 		{
-			if (!isFirst)
-				builder.Append(", ");
-			isFirst = false;
+			if(this.Users.Count < 6)
+				return ":black_small_square: ";
 
-			IUser user = await Bot.Client.GetUserAsync(userId);
-			builder.Append(user.GlobalName);
+			if(this.Users.Count < 8)
+				return ":small_orange_diamond: ";
+
+			return ":small_blue_diamond: ";
 		}
 
-		return builder.ToString();
-	}
-	public MessageComponent BuildComponents()
-	{
-		ComponentBuilder b = new();
-		b.WithButton(
-			$"Monday 8:30PM ({this.Monday.Votes830.Count})", 
-			"poll-header-mon", 
-			this.GetButtonStyle(this.Monday.Votes830.Count),
-			row:0);
-
-		b.WithButton(
-			$"Tuesday (Reclears)", 
-			"poll-header-tues", 
-			ButtonStyle.Secondary, 
-			disabled:true, 
-			row:0);
-
-		b.WithButton(
-			$"Wednesday 8:30PM ({this.Wednesday.Votes830.Count})", 
-			"poll-header-wed", 
-			this.GetButtonStyle(this.Wednesday.Votes830.Count),
-			row:0);
-
-		b.WithButton(
-			$"Thursday 8:30PM ({this.Thursday.Votes830.Count})", 
-			"poll-header-thurs", 
-			this.GetButtonStyle(this.Thursday.Votes830.Count),
-			row:0);
-
-		b.WithButton(
-			$"Friday 8:30PM ({this.Friday.Votes830.Count})", 
-			"poll-header-fri", 
-			this.GetButtonStyle(this.Friday.Votes830.Count), 
-			row:0);
-
-		b.WithButton(
-			$"Saturday 4PM ({this.Saturday.Votes400.Count})", 
-			"poll-header-sat4", 
-			this.GetButtonStyle(this.Saturday.Votes400.Count), 
-			row:1);
-
-		b.WithButton(
-			$"Saturday 8PM ({this.Saturday.Votes830.Count})", 
-			"poll-header-sat8",
-			this.GetButtonStyle(this.Saturday.Votes830.Count), 
-			row:1);
-
-		b.WithButton(
-			$"Sunday 4PM ({this.Sunday.Votes400.Count})", 
-			"poll-header-sun4", 
-			this.GetButtonStyle(this.Sunday.Votes400.Count), 
-			row:2);
-
-		b.WithButton(
-			$"Sunday 8PM ({this.Sunday.Votes830.Count})", 
-			"poll-header-sun8", 
-			this.GetButtonStyle(this.Sunday.Votes830.Count), 
-			row:2);
-
-		return b.Build();
-	}
-	public ButtonStyle GetButtonStyle(int votes)
-	{
-		if(votes < 6)
-			return ButtonStyle.Secondary;
-		
-		if(votes < 8)
-			return ButtonStyle.Primary;
-
-		return ButtonStyle.Success;
-	}
-
-	public void Vote(string id, ulong user)
-	{
-		HashSet<ulong> set = this.GetSet(id);
-
-		if (set.Contains(user))
+		public ButtonStyle GetButtonStyle()
 		{
-			set.Remove(user);
-		}
-		else
-		{
-			set.Add(user);
+			if(this.Users.Count < 6)
+				return ButtonStyle.Secondary;
+
+			if(this.Users.Count < 8)
+				return ButtonStyle.Primary;
+
+			return ButtonStyle.Success;
 		}
 	}
 
-	public HashSet<ulong> GetSet(string id)
+	public void AddSlot(DayOfWeek dayOfWeek, TimeOnly time, string name)
 	{
-		switch(id)
+		Day day = this.GetDay(dayOfWeek);
+		day.AddSlot(name, time);
+	}
+
+	public Day GetDay(DayOfWeek dayOfweek)
+	{
+		foreach(Day day in this.Days)
 		{
-			case "poll-header-mon": return this.Monday.Votes830;
-			case "poll-header-tues": return this.Tuesday.Votes830;
-			case "poll-header-wed": return this.Wednesday.Votes830;
-			case "poll-header-thurs": return this.Thursday.Votes830;
-			case "poll-header-fri": return this.Friday.Votes830;
-			case "poll-header-sat4": return this.Saturday.Votes400;
-			case "poll-header-sat8": return this.Saturday.Votes830;
-			case "poll-header-sun4": return this.Sunday.Votes400;
-			case "poll-header-sun8": return this.Sunday.Votes830;
+			if(day.RaidDay == dayOfweek)
+			{
+				return day;
+			}
 		}
 
-		throw new NotSupportedException();
+		Day newDay = new();
+		newDay.RaidDay = dayOfweek;
+		this.Days.Add(newDay);
+
+		return newDay;
+	}
+
+	public async Task Post(IMessageChannel channel)
+	{
+		foreach(Day day in this.Days)
+		{
+			(string message, MessageComponent component) = await day.Generate();
+			IUserMessage postedMessage = await channel.SendMessageAsync(message, components:component);
+			day.MessageId = postedMessage.Id;
+		}
+	}
+
+	public async Task Update(IMessageChannel channel)
+	{
+		foreach(Day day in this.Days)
+		{
+			(string message, MessageComponent component) = await day.Generate();
+
+			IMessage postedMessage = await channel.GetMessageAsync(day.MessageId);
+			if (postedMessage is IUserMessage userMessage)
+			{
+				await userMessage.ModifyAsync((m) =>
+				{
+					m.Content = message;
+					m.Components = component;
+				});
+			}
+		}
+	}
+
+	public Day? Join(string callbackId, IUser user)
+	{
+		string[] parts = callbackId.Split("-");
+
+		if (parts.Length != 3)
+			throw new Exception();
+
+		DayOfWeek dayOfWeek = Enum.Parse<DayOfWeek>(parts[1]);
+		string slotName = parts[2];
+
+		Day day = this.GetDay(dayOfWeek);
+
+		foreach(Slot slot in day.Slots)
+		{
+			if (slot.Name == slotName)
+			{
+				if (slot.Users.Contains(user.Id))
+				{
+					slot.Users.Remove(user.Id);
+				}
+				else
+				{
+					slot.Users.Add(user.Id);
+				}
+
+				return day;
+			}
+		}
+
+		return null;
+	}
+
+	public async Task Reset(DayOfWeek dayOfWeek, IMessageChannel channel)
+	{
+		Day day = this.GetDay(dayOfWeek);
+		foreach(Slot slot in day.Slots)
+		{
+			slot.Users.Clear();
+		}
+
+		IMessage message = await channel.GetMessageAsync(day.MessageId);
+		if (message is IUserMessage userMessage)
+		{
+			(string content, MessageComponent component) = await day.Generate();
+			await userMessage.ModifyAsync((m) =>
+			{
+				m.Content = content;
+				m.Components = component;
+			});
+		}
+	}
+
+	public void SetIconStore(IGuild guild)
+	{
+		foreach(Day day in this.Days)
+		{
+			day.IconStore = guild.Id;
+		}
 	}
 }
