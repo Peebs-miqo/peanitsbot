@@ -39,9 +39,10 @@ public class RaidPlannerModule
 	[SlashCommand("create", "Create a weekly schedule here")]
 	public async Task Poll()
 	{
+		await this.DeferAsync(true);
 		await this.schedule.Post(this.Context.Channel);
 		this.Save();
-		await this.RespondAsync("Done", ephemeral: true);
+		await this.ModifyOriginalResponseAsync((m) => m.Content = "Done");
 	}
 
 	[SlashCommand("update", "Updates posted days")]
