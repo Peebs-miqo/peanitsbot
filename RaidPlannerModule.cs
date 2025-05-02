@@ -125,8 +125,8 @@ public class Schedule
 			StringBuilder message = new();
 			ComponentBuilder components = new();
 
-			DateTimeOffset dayTime = DateTimeOffset.UtcNow;
-			dayTime = dayTime.AddHours(10);
+			TimeZoneInfo timeZone = TimeZoneInfo.FindSystemTimeZoneById("E. Australia Standard Time");
+			DateTimeOffset dayTime = TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, timeZone);
 			dayTime = dayTime.AddDays(-(int)dayTime.DayOfWeek);
 			dayTime = dayTime.AddDays((int)this.RaidDay);
 
