@@ -64,7 +64,7 @@ public class RaidPlannerModule
 		await this.RespondAsync("Done", ephemeral: true);
 	}
 
-	[SlashCommand("set-icon-store", "Sets the schdules icon store to the server")]
+	[SlashCommand("set-icon-store", "Sets the schedules icon store to the server")]
 	public async Task SetIconStore()
 	{
 		this.schedule.SetIconStore(this.Context.Guild);
