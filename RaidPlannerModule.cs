@@ -125,7 +125,8 @@ public class Schedule
 			StringBuilder message = new();
 			ComponentBuilder components = new();
 
-			DateTimeOffset dayTime = DateTimeOffset.Now.ToOffset(TimeSpan.FromHours(10));
+			DateTimeOffset dayTime = DateTimeOffset.UtcNow;
+			dayTime.AddHours(10);
 			dayTime = dayTime.AddDays(-(int)dayTime.DayOfWeek);
 			dayTime = dayTime.AddDays((int)this.RaidDay);
 
