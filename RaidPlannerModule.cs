@@ -125,8 +125,7 @@ public class Schedule
 			StringBuilder message = new();
 			ComponentBuilder components = new();
 
-			TimeZoneInfo timeZone = TimeZoneInfo.FindSystemTimeZoneById("E. Australia Standard Time");
-			DateTimeOffset dayTime = TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, timeZone);
+			DateTimeOffset dayTime = DateTimeOffset.UtcNow;
 			dayTime = dayTime.AddDays(-(int)dayTime.DayOfWeek);
 			dayTime = dayTime.AddDays((int)this.RaidDay);
 
@@ -140,6 +139,7 @@ public class Schedule
 			{
 				DateTimeOffset slotTime = dayTime.Date;
 				slotTime = slotTime.AddTicks(slot.Time.Ticks);
+				slotTime = slotTime.AddHours(10);
 
 				message.Append(slot.GetIcon());
 				message.Append(slot.Name);
