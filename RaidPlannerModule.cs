@@ -126,7 +126,7 @@ public class Schedule
 			ComponentBuilder components = new();
 
 			DateTimeOffset dayTime = DateTimeOffset.UtcNow;
-			dayTime.AddHours(10);
+			dayTime = dayTime.AddHours(10);
 			dayTime = dayTime.AddDays(-(int)dayTime.DayOfWeek);
 			dayTime = dayTime.AddDays((int)this.RaidDay);
 
