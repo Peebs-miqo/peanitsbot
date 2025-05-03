@@ -130,7 +130,7 @@ public class Schedule
 			dayTime = dayTime.AddDays(-(int)dayTime.DayOfWeek);
 			dayTime = dayTime.AddDays((int)this.RaidDay);
 
-			if(dayTime < DateTimeOffset.Now.AddDays(1))
+			if(dayTime < DateTimeOffset.Now.AddDays(-1))
 				dayTime = dayTime.AddDays(7);
 
 			message.AppendLine("<:empty:1367790271059984434>");
