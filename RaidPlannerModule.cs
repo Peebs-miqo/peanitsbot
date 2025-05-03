@@ -40,7 +40,7 @@ public class RaidPlannerModule
 	public async Task Poll()
 	{
 		await this.DeferAsync(true);
-		await this.schedule.Post(this.Context.Channel);
+		await this.schedule.Post(this.Context.Channel, this.Context.Guild);
 		this.Save();
 		await this.ModifyOriginalResponseAsync((m) => m.Content = "Done");
 	}
@@ -51,7 +51,7 @@ public class RaidPlannerModule
 		await this.DeferAsync(true);
 		await this.ModifyOriginalResponseAsync((m) => m.Content = "Updating...");
 
-		await this.schedule.Update(this.Context.Channel);
+		await this.schedule.Update(this.Context.Channel, this.Context.Guild);
 		this.Save();
 
 		await this.ModifyOriginalResponseAsync((m) => m.Content = "Done");
@@ -60,7 +60,7 @@ public class RaidPlannerModule
 	[SlashCommand("reset", "Resets the selected day")]
 	public async Task Reset(DayOfWeek day)
 	{
-		await this.schedule.Reset(day, this.Context.Channel);
+		await this.schedule.Reset(day, this.Context.Channel, this.Context.Guild);
 		this.Save();
 		await this.RespondAsync("Done", ephemeral: true);
 	}
@@ -88,7 +88,7 @@ public class RaidPlannerModule
 		}
 		else
 		{
-			(string message, MessageComponent component) = await day.Generate();
+			(string message, MessageComponent component) = await day.Generate(this.Context.Guild);
 			await sm.UpdateAsync(m =>
 			{
 				m.Content = message;
@@ -119,7 +119,7 @@ public class Schedule
 			this.Slots.Add(slot);
 		}
 
-		public async Task<(string message, MessageComponent component)> Generate()
+		public async Task<(string message, MessageComponent component)> Generate(IGuild guild)
 		{
 			await Task.Yield();
 
@@ -130,7 +130,7 @@ public class Schedule
 			dayTime = dayTime.AddDays(-(int)dayTime.DayOfWeek);
 			dayTime = dayTime.AddDays((int)this.RaidDay);
 
-			if(dayTime < DateTimeOffset.Now)
+			if(dayTime < DateTimeOffset.Now.AddDays(1))
 				dayTime = dayTime.AddDays(7);
 
 			message.AppendLine("<:empty:1367790271059984434>");
@@ -156,15 +156,14 @@ public class Schedule
 
 					isFirstUser = false;
 
-					IUser user = await Bot.Client.GetUserAsync(userId);
-
+					IGuildUser user = await guild.GetUserAsync(userId);
 					if (this.IconStore != null)
 					{
 						message.Append(await DiscordUtils.GetUserAvatarAsEmote(user, (ulong)this.IconStore));
 						message.Append(" ");
 					}
 
-					message.Append(user.GlobalName);
+					message.Append(user.DisplayName);
 				}
 
 				message.AppendLine();
@@ -227,21 +226,21 @@ public class Schedule
 		return newDay;
 	}
 
-	public async Task Post(IMessageChannel channel)
+	public async Task Post(IMessageChannel channel, IGuild guild)
 	{
 		foreach(Day day in this.Days)
 		{
-			(string message, MessageComponent component) = await day.Generate();
+			(string message, MessageComponent component) = await day.Generate(guild);
 			IUserMessage postedMessage = await channel.SendMessageAsync(message, components:component);
 			day.MessageId = postedMessage.Id;
 		}
 	}
 
-	public async Task Update(IMessageChannel channel)
+	public async Task Update(IMessageChannel channel, IGuild guild)
 	{
 		foreach(Day day in this.Days)
 		{
-			(string message, MessageComponent component) = await day.Generate();
+			(string message, MessageComponent component) = await day.Generate(guild);
 
 			IMessage postedMessage = await channel.GetMessageAsync(day.MessageId);
 			if (postedMessage is IUserMessage userMessage)
@@ -287,7 +286,7 @@ public class Schedule
 		return null;
 	}
 
-	public async Task Reset(DayOfWeek dayOfWeek, IMessageChannel channel)
+	public async Task Reset(DayOfWeek dayOfWeek, IMessageChannel channel, IGuild guild)
 	{
 		Day day = this.GetDay(dayOfWeek);
 		foreach(Slot slot in day.Slots)
@@ -298,7 +297,7 @@ public class Schedule
 		IMessage message = await channel.GetMessageAsync(day.MessageId);
 		if (message is IUserMessage userMessage)
 		{
-			(string content, MessageComponent component) = await day.Generate();
+			(string content, MessageComponent component) = await day.Generate(guild);
 			await userMessage.ModifyAsync((m) =>
 			{
 				m.Content = content;
