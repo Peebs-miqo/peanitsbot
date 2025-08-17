@@ -80,22 +80,29 @@ public class RaidPlannerModule
 		if (sm == null || sm.GuildId == null)
 			return;
 
-		Schedule.Day? day = this.schedule.Join(sm.Data.CustomId, this.Context.Interaction.User);
+		try
+		{
 
-		if (day == null)
-		{
-			await this.RespondAsync("Failed");
-		}
-		else
-		{
-			(string message, MessageComponent component) = await day.Generate(this.Context.Guild);
-			await sm.UpdateAsync(m =>
+			Schedule.Day? day = this.schedule.Join(sm.Data.CustomId, this.Context.Interaction.User);
+			if (day == null)
 			{
-				m.Content = message;
-				m.Components = component;
-			});
+				await this.RespondAsync("Failed");
+			}
+			else
+			{
+				(string message, MessageComponent component) = await day.Generate(this.Context.Guild);
+				await sm.UpdateAsync(m =>
+				{
+					m.Content = message;
+					m.Components = component;
+				});
 
-			this.Save();
+				this.Save();
+			}
+		}
+		catch (Exception ex)
+		{
+			await this.RespondAsync(ex.Message);
 		}
 	}
 }
