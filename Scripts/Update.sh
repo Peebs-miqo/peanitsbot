@@ -3,4 +3,4 @@ echo "Updating Studio Online..."
 echo "Getting latest"
 git pull
 echo "Starting Server"
-(dotnet run &)
+(dotnet run)&
